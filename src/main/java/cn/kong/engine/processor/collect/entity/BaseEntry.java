@@ -2,7 +2,7 @@ package cn.kong.engine.processor.collect.entity;
 
 /**
  * @author gzkon
- * @description: TODO
+ * @description: 爬虫基类
  * @date 2025/6/22 11:59
  */
 public class BaseEntry {

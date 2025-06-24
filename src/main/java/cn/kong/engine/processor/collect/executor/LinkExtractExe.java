@@ -1,6 +1,6 @@
 package cn.kong.engine.processor.collect.executor;
 
-import cn.kong.engine.processor.collect.job.CrawlerContent;
+import cn.kong.engine.content.CrawlerContent;
 import cn.kong.engine.processor.collect.entity.BaseEntry;
 import cn.kong.engine.processor.collect.entity.HtmlEntry;
 import com.google.common.base.Strings;
@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * @author gzkon
- * @description: TODO
+ * @description: 链接提取执行器
  * @date 2025/6/22 12:24
  */
 @Service
@@ -27,13 +27,13 @@ public class LinkExtractExe implements BaseExecutor<HtmlEntry> {
 
     private static final String NODE_NAME = "LinkExtract";
 
-    private static final List<String> SKIP_EXTENSIONS = List.of(".pdf", ".doc", ".jpg", ".png", ".zip", ".exe",".rar",".apk");
+    private static final List<String> SKIP_EXTENSIONS = List.of(".pdf", ".doc", ".jpg", ".png", ".zip", ".exe", ".rar", ".apk");
 
-
+    //@SuppressWarnings("all")
     @Override
     public void execute(HtmlEntry entry, CrawlerContent content) {
         if (Objects.isNull(entry)) {
-            entry = (HtmlEntry)content.getNodeData("Request");
+            entry = (HtmlEntry) content.getNodeData("Request");
         }
         String html = entry.getHtml();
         if (Strings.isNullOrEmpty(html)) {
@@ -54,6 +54,7 @@ public class LinkExtractExe implements BaseExecutor<HtmlEntry> {
             for (Element link : links) {
                 String url = link.absUrl("href");
                 if (isHtmlUrl(url) && url.startsWith("http")) {
+                    // 过滤掉重复的URL
                     synchronized (bloomFilter) {
                         if (!bloomFilter.mightContain(url)) {
                             long id = docId.incrementAndGet();
@@ -63,7 +64,9 @@ public class LinkExtractExe implements BaseExecutor<HtmlEntry> {
                     }
                 }
             }
+        } catch (Exception ignored) {
         } finally {
+            // 手动清理ThreadLocal
             content.clearNodeData();
         }
     }

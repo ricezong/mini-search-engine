@@ -1,6 +1,6 @@
 package cn.kong.engine.processor.collect.executor;
 
-import cn.kong.engine.processor.collect.job.CrawlerContent;
+import cn.kong.engine.content.CrawlerContent;
 import cn.kong.engine.processor.collect.entity.BaseEntry;
 import cn.kong.engine.processor.collect.entity.HtmlEntry;
 import lombok.extern.slf4j.Slf4j;
@@ -8,6 +8,7 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -16,7 +17,7 @@ import java.util.Random;
 
 /**
  * @author gzkon
- * @description: TODO
+ * @description: 处理请求的执行器
  * @date 2025/6/22 12:28
  */
 @Slf4j
@@ -36,13 +37,19 @@ public class RequestExe implements BaseExecutor<BaseEntry> {
             "Mozilla/5.0 (iPad; CPU OS 15_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.4 Mobile/15E148 Safari/604.1"
     );
 
+    private final OkHttpClient httpClient;
+
+    @Autowired
+    public RequestExe(OkHttpClient httpClient) {
+        this.httpClient = httpClient;
+    }
+
 
     @Override
     public void execute(BaseEntry entry, CrawlerContent content) {
-        OkHttpClient httpClient = content.getHttpClient();
         String url = entry.getUrl();
         Request request = buildRequest(url, content);
-        //log.info("Fetching {}", url);
+        log.info("Fetching {}", url);
 
         try (Response response = httpClient.newCall(request).execute()) {
             handleResponse(response, content, entry);
@@ -78,7 +85,7 @@ public class RequestExe implements BaseExecutor<BaseEntry> {
 
         try {
             String html = body.string();
-            content.putNodeData(NODE_NAME, of(html, entry));
+            content.putNodeData(NODE_NAME, buildHtmlEntry(html, entry));
         } catch (IOException e) {
             log.error("Error reading response body", e);
         }
@@ -90,7 +97,7 @@ public class RequestExe implements BaseExecutor<BaseEntry> {
         return NODE_NAME;
     }
 
-    private HtmlEntry of(String html, BaseEntry entry) {
+    private HtmlEntry buildHtmlEntry(String html, BaseEntry entry) {
         HtmlEntry htmlEntry = new HtmlEntry();
         htmlEntry.setId(entry.getId());
         htmlEntry.setUrl(entry.getUrl());

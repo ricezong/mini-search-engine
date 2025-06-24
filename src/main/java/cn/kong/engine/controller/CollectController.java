@@ -1,10 +1,9 @@
 package cn.kong.engine.controller;
 
+import cn.kong.engine.model.CrawlerTask;
 import cn.kong.engine.service.CollectService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 /**
  * @author gzkon
@@ -19,8 +18,14 @@ public class CollectController {
     private CollectService collectService;
 
     @PostMapping("/run")
-    public String runCrawler(@RequestBody List<String> seeds) {
-        collectService.runCrawler(seeds);
+    public String runCrawler(@RequestBody CrawlerTask task) {
+        collectService.runCrawler(task);
         return "Crawler started in the background";
+    }
+
+    @GetMapping("/stop")
+    public String stopCrawler(@RequestParam String taskId) {
+        collectService.stopCrawler(taskId);
+        return "Crawler stopped successfully";
     }
 }

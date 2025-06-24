@@ -1,3 +1,15 @@
 spring:
   application:
     name: mini-search-engine
+
+crawler:
+  http:
+    max-idle-connections: 20
+    keep-alive-duration: 5 # 分钟
+  thread-pool:
+    core-size: 10
+    max-size: 50
+    queue-size: 5000
+    keep-alive-seconds: 120
+    thread-name-prefix: "crawler-thread-"
+    rejected-policy: "ABORT" # ABORT, CALLER_RUNS, DISCARD, DISCARD_OLDEST

@@ -1,4 +1,4 @@
-package cn.kong.engine.processor.collect.entity;
+package cn.kong.engine.model;
 
 import cn.kong.engine.annotation.DbField;
 import cn.kong.engine.annotation.DbTable;
@@ -41,7 +41,7 @@ public class DocInfo {
     private String contentType;         // 内容类型 (text/html, application/json等)
 
     @DbField(name = "content_length")
-    private Long contentLength;         // 内容长度(字节)
+    private Integer contentLength;         // 内容长度(字节)
 
     @DbField(name = "create_time")
     private LocalDateTime createTime;   // 记录创建时间

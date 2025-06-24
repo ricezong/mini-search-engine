@@ -1,22 +1,20 @@
 package cn.kong.engine.processor.collect;
 
+import cn.kong.engine.content.CrawlerContent;
+import cn.kong.engine.model.DocInfo;
 import cn.kong.engine.processor.collect.entity.BaseEntry;
-import cn.kong.engine.processor.collect.entity.DocInfo;
 import cn.kong.engine.processor.collect.executor.HtmlWritingExe;
 import cn.kong.engine.processor.collect.executor.LinkExtractExe;
 import cn.kong.engine.processor.collect.executor.LinkRecordExe;
 import cn.kong.engine.processor.collect.executor.RequestExe;
-import cn.kong.engine.processor.collect.job.CrawlerConfig;
-import cn.kong.engine.processor.collect.job.CrawlerContent;
 import cn.kong.engine.service.SQLiteService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -27,57 +25,56 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 @Component
 public class Crawler {
-    private static ExecutorService executorService;
+    private static ThreadPoolTaskExecutor executorService;
     private final RequestExe requestExe;
     private final LinkExtractExe linkExtractExe;
     private final LinkRecordExe linkRecordExe;
     private final HtmlWritingExe htmlWritingExe;
     private final SQLiteService sqliteService;
 
-    public Crawler() {
-        executorService = CrawlerConfig.createThreadPool();
-        this.requestExe = new RequestExe();
-        this.linkExtractExe = new LinkExtractExe();
-        this.linkRecordExe = new LinkRecordExe();
-        this.htmlWritingExe = new HtmlWritingExe();
-        this.sqliteService = new SQLiteService();
+    @Autowired
+    public Crawler(@Qualifier("crawlerThreadPool") ThreadPoolTaskExecutor crawlerThreadPool,
+                   RequestExe requestExe,
+                   LinkExtractExe linkExtractExe,
+                   LinkRecordExe linkRecordExe,
+                   HtmlWritingExe htmlWritingExe,
+                   SQLiteService sqliteService) {
+        // 初始化线程池
+        executorService = crawlerThreadPool;
+        // 初始化依赖注入的服务
+        this.requestExe = requestExe;
+        this.linkExtractExe = linkExtractExe;
+        this.linkRecordExe = linkRecordExe;
+        this.htmlWritingExe = htmlWritingExe;
+        this.sqliteService = sqliteService;
     }
 
 
-    public void run() {
-        List<String> seeds = new ArrayList<>();
-        seeds.add("https://www.qq.com/");
-        run(seeds);
-    }
-
-    public void run(List<String> links) {
-        CrawlerContent content = new CrawlerContent();
-        content.init(links);
-
+    public void run(CrawlerContent content) {
         // 启动一个线程来执行数据存储的逻辑
         executorService.submit(() -> {
             try {
-                dataStored(content);  // 在一个独立线程中执行数据存储逻辑
+                doStored(content);  // 在一个独立线程中执行数据存储逻辑
             } catch (Exception e) {
                 log.error("数据存储执行失败: {}", e.getMessage(), e);
                 // 终止线程池
-                executorService.shutdownNow();
+                executorService.shutdown();
             }
         });
 
-        // 继续执行 Crawler 的逻辑
-        run(content);
-    }
-
-    public void run(CrawlerContent content) {
-        while (true) {
+        while (content.getRunning()) {
             try {
                 BaseEntry entry = content.getUrlQueue().poll(1, TimeUnit.SECONDS);
                 if (entry != null) {
                     linkRecordExe.execute(entry, content);
-                    executorService.submit(() -> run(entry, content));
+                    if (content.getRunning()) {
+                        executorService.submit(() -> run(entry, content));
+                    } else {
+                        log.info("爬虫任务已停止，结束执行");
+                        break;
+                    }
                 } else {
-                    if (((ThreadPoolExecutor) executorService).getActiveCount() == 0) {
+                    if (executorService.getActiveCount() == 0) {
                         break;
                     }
                 }
@@ -88,6 +85,8 @@ public class Crawler {
         }
         linkRecordExe.flushRemaining();
         executorService.shutdown();
+        content.clearNodeData();
+        content.closeCurrentWriter();
     }
 
     private void run(BaseEntry entry, CrawlerContent content) {
@@ -96,7 +95,7 @@ public class Crawler {
     }
 
     // 数据存储
-    private void dataStored(CrawlerContent content) {
+    private void doStored(CrawlerContent content) {
         long totalCount = sqliteService.count();
         long processedCount = 0;
 
@@ -121,7 +120,7 @@ public class Crawler {
         }
 
         // 进入数据处理循环
-        while (true) {
+        while (content.getRunning()) {
             log.info("处理进度: {}/{} ({}%)", processedCount, totalCount, String.format("%.2f", processedCount * 100.0 / totalCount));
 
             // 处理当前批次数据
@@ -145,6 +144,10 @@ public class Crawler {
     private long processBatch(long totalCount, long startIndex, CrawlerContent content) {
         int processed = 0;
         for (long step = startIndex + 1; step <= totalCount; step++) {
+            if (!content.getRunning()) {
+                log.info("爬虫任务已停止，结束数据处理");
+                break;
+            }
             Optional<DocInfo> raw = sqliteService.selectById(step);
             if (raw.isEmpty()) {
                 continue;
